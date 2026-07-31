@@ -1,105 +1,898 @@
-// Kode untuk Google Apps Script
-function doGet() {
-  return ContentService.createTextOutput(JSON.stringify({"status": "connected"}))
+<!DOCTYPE html>
+<html lang="id" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KeuanganKu - Riwayat Keuangan & Google Sheets Sync</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#075985',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Google Fonts & FontAwesome -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="h-full text-slate-800 antialiased bg-slate-50 flex flex-col">
+
+    <!-- Top Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16 gap-4">
+                <!-- App Logo & Title -->
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-sky-200">
+                        <i class="fa-solid font-bold fa-wallet text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg text-slate-900 leading-tight">KeuanganKu</h1>
+                        <p class="text-xs text-slate-500 hidden sm:block">Riwayat Transaksi & Google Sheets Sync</p>
+                    </div>
+                </div>
+
+                <!-- Connection Status Badge & Header Actions -->
+                <div class="flex items-center gap-2 sm:gap-3">
+                    <!-- Status Indicator Badge -->
+                    <div id="statusBadge" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-600 border border-rose-200 transition-all duration-300">
+                        <span class="relative flex h-2.5 w-2.5">
+                          <span id="statusPing" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75 hidden"></span>
+                          <span id="statusDot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                        </span>
+                        <span id="statusText">Tidak Terhubung</span>
+                    </div>
+
+                    <!-- Sync Button -->
+                    <button id="btnSyncNow" onclick="app.syncData()" title="Sinkronkan data ke Google Sheet" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition active:scale-95">
+                        <i class="fa-solid fa-rotate text-slate-500" id="syncIcon"></i>
+                        <span class="hidden sm:inline">Sync Sheet</span>
+                    </button>
+
+                    <!-- Apps Script Config Button -->
+                    <button onclick="app.openModal('scriptModal')" class="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-sky-700 bg-sky-50 border border-sky-200 hover:bg-sky-100 rounded-lg transition shadow-sm active:scale-95">
+                        <i class="fa-solid fa-file-code"></i>
+                        <span class="hidden md:inline">Pengaturan Sheet</span>
+                    </button>
+
+                    <!-- Add Transaction Button -->
+                    <button onclick="app.openModal('transactionModal')" class="flex items-center gap-2 px-3.5 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-700 rounded-lg shadow-md shadow-sky-100 transition active:scale-95">
+                        <i class="fa-solid fa-plus"></i>
+                        <span class="hidden sm:inline">Tambah Transaksi</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Toast Notification Banner -->
+    <div id="toastContainer" class="fixed top-20 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        
+        <!-- Summary Cards Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Total Saldo -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Saldo Bersih</p>
+                        <h2 id="totalBalance" class="text-2xl font-bold text-slate-900 mt-1">Rp 0</h2>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center text-xl">
+                        <i class="fa-solid fa-scale-balanced"></i>
+                    </div>
+                </div>
+                <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                    <span>Total Transaksi</span>
+                    <span id="transactionCount" class="font-semibold text-slate-700">0</span>
+                </div>
+            </div>
+
+            <!-- Total Pemasukan -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-emerald-600 uppercase tracking-wider">Total Pemasukan</p>
+                        <h2 id="totalIncome" class="text-2xl font-bold text-emerald-600 mt-1">Rp 0</h2>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
+                        <i class="fa-solid fa-arrow-down-left"></i>
+                    </div>
+                </div>
+                <div class="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500 flex items-center justify-between">
+                    <span>Transaksi Masuk</span>
+                    <span id="incomeCount" class="font-semibold text-emerald-600">0</span>
+                </div>
+            </div>
+
+            <!-- Total Pengeluaran -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-rose-600 uppercase tracking-wider">Total Pengeluaran</p>
+                        <h2 id="totalExpense" class="text-2xl font-bold text-rose-600 mt-1">Rp 0</h2>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-xl">
+                        <i class="fa-solid fa-arrow-up-right"></i>
+                    </div>
+                </div>
+                <div class="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500 flex items-center justify-between">
+                    <span>Transaksi Keluar</span>
+                    <span id="expenseCount" class="font-semibold text-rose-600">0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Financial Charts Section -->
+        <div class="grid grid-cols-1 gap-6">
+            <!-- Bar Chart: Overview -->
+            <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+                <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-column text-indigo-600"></i>
+                    Perbandingan Pemasukan & Pengeluaran
+                </h3>
+                <div class="relative h-60">
+                    <canvas id="monthlyTrendChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter & Search Controls -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-3">
+            <div class="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+                <!-- Search Input -->
+                <div class="relative flex-1">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                    <input type="text" id="searchInput" oninput="app.filterTransactions()" placeholder="Cari keterangan transaksi..." class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition">
+                </div>
+
+                <!-- Filters Group -->
+                <div class="flex flex-wrap items-center gap-2">
+                    <!-- Type Filter -->
+                    <select id="filterType" onchange="app.filterTransactions()" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20">
+                        <option value="ALL">Semua Jenis</option>
+                        <option value="PEMASUKAN">Pemasukan</option>
+                        <option value="PENGELUARAN">Pengeluaran</option>
+                    </select>
+
+                    <!-- Date Filter -->
+                    <input type="date" id="filterDate" onchange="app.filterTransactions()" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20">
+
+                    <!-- Reset Filter Button -->
+                    <button onclick="app.resetFilters()" title="Reset Filter" class="p-2 text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition text-xs">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </button>
+
+                    <!-- Export CSV -->
+                    <button onclick="app.exportCSV()" title="Ekspor Data ke CSV" class="p-2 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition text-xs border border-emerald-200 font-semibold flex items-center gap-1.5 px-3">
+                        <i class="fa-solid fa-file-csv text-sm"></i>
+                        <span class="hidden sm:inline">Ekspor CSV</span>
+                    </button>
+
+                    <!-- Kosongkan Data -->
+                    <button onclick="app.clearAllData()" title="Kosongkan Semua Data" class="p-2 text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl transition text-xs border border-rose-200 font-semibold flex items-center gap-1.5 px-3">
+                        <i class="fa-solid fa-trash-arrow-up text-sm"></i>
+                        <span class="hidden sm:inline">Kosongkan Data</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Transactions Table Section -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+            <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                    <i class="fa-solid fa-list text-sky-600"></i>
+                    Riwayat Transaksi
+                </h3>
+                <span id="filteredCountLabel" class="text-xs font-medium text-slate-500">Menampilkan 0 data</span>
+            </div>
+
+            <div class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-left text-xs sm:text-sm">
+                    <thead class="bg-slate-50 text-slate-500 uppercase text-[11px] font-semibold tracking-wider border-b border-slate-100">
+                        <tr>
+                            <th class="py-3 px-4">Tanggal</th>
+                            <th class="py-3 px-4">Jenis</th>
+                            <th class="py-3 px-4">Keterangan</th>
+                            <th class="py-3 px-4 text-right">Jumlah</th>
+                            <th class="py-3 px-4 text-center">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactionTableBody" class="divide-y divide-slate-100">
+                        <!-- Items rendered via JS -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Empty State Display -->
+            <div id="emptyState" class="py-12 px-4 text-center">
+                <div class="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl">
+                    <i class="fa-solid fa-receipt"></i>
+                </div>
+                <h4 class="text-sm font-semibold text-slate-700">Belum Ada Transaksi</h4>
+                <p class="text-xs text-slate-500 mt-1 max-w-xs mx-auto">Klik tombol "Tambah Transaksi" di pojok kanan atas untuk mencatat keuangan Anda.</p>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Modal: Add/Edit Transaction -->
+    <div id="transactionModal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 id="modalTxTitle" class="font-bold text-slate-800 text-base flex items-center gap-2">
+                    <i class="fa-solid fa-plus-circle text-sky-600"></i> Tambah Transaksi Baru
+                </h3>
+                <button onclick="app.closeModal('transactionModal')" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form id="txForm" onsubmit="app.saveTransaction(event)" class="space-y-4">
+                <input type="hidden" id="txId">
+
+                <!-- Type Selector -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Jenis Transaksi</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <label class="flex items-center justify-center gap-2 p-2.5 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer has-[:checked]:bg-emerald-50 has-[:checked]:border-emerald-500 has-[:checked]:text-emerald-700 transition">
+                            <input type="radio" name="txType" value="PEMASUKAN" checked class="hidden">
+                            <i class="fa-solid fa-arrow-down-left text-emerald-600"></i>
+                            <span class="text-xs font-bold">Pemasukan</span>
+                        </label>
+                        <label class="flex items-center justify-center gap-2 p-2.5 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer has-[:checked]:bg-rose-50 has-[:checked]:border-rose-500 has-[:checked]:text-rose-700 transition">
+                            <input type="radio" name="txType" value="PENGELUARAN" class="hidden">
+                            <i class="fa-solid fa-arrow-up-right text-rose-600"></i>
+                            <span class="text-xs font-bold">Pengeluaran</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Date -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Tanggal</label>
+                    <input type="date" id="txDate" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500">
+                </div>
+
+                <!-- Amount -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Jumlah (Rp)</label>
+                    <input type="number" id="txAmount" min="1" step="any" placeholder="Contoh: 50000" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500">
+                </div>
+
+                <!-- Description -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Keterangan</label>
+                    <input type="text" id="txDescription" placeholder="Contoh: Gaji Bulanan / Beli Makan Siang" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500">
+                </div>
+
+                <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                    <button type="button" onclick="app.closeModal('transactionModal')" class="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition">Batal</button>
+                    <button type="submit" class="px-4 py-2 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-700 rounded-xl transition shadow-md shadow-sky-100">Simpan Transaksi</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Google Apps Script Configuration -->
+    <div id="scriptModal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-xl w-full p-6 shadow-xl border border-slate-100 space-y-4 max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-base flex items-center gap-2">
+                    <i class="fa-solid fa-file-code text-sky-600"></i> Pengaturan Google Sheets Sync
+                </h3>
+                <button onclick="app.closeModal('scriptModal')" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div class="space-y-4 overflow-y-auto custom-scrollbar pr-1 flex-1 text-xs text-slate-600">
+                <div>
+                    <label class="block font-semibold text-slate-800 mb-1">Web App URL Google Apps Script</label>
+                    <input type="url" id="scriptUrlInput" placeholder="https://script.google.com/macros/s/.../exec" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 font-mono">
+                </div>
+
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-slate-700">Kode Google Apps Script (Kode.gs):</span>
+                        <button onclick="app.copyScriptCode()" class="text-sky-600 hover:text-sky-700 font-semibold flex items-center gap-1">
+                            <i class="fa-regular fa-copy"></i> <span id="copyBtnText">Salin Kode.gs</span>
+                        </button>
+                    </div>
+                    <textarea id="appsScriptCode" readonly class="w-full h-32 p-2.5 bg-slate-900 text-slate-200 font-mono text-[11px] rounded-lg border border-slate-700 focus:outline-none custom-scrollbar">
+function doGet(e) {
+  return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "KeuanganKu API Ready" }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
 function doPost(e) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  var data = JSON.parse(e.postData.contents);
-  
-  // Format: {date, type, description, amount}
-  sheet.appendRow([data.date, data.type, data.description, data.amount]);
-  
-  return ContentService.createTextOutput(JSON.stringify({"status": "success"}))
-    .setMimeType(ContentService.MimeType.JSON);
-}
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    
+    if (data.action === "syncAll") {
+      sheet.clear();
+      sheet.appendRow(["ID", "Tanggal", "Jenis", "Keterangan", "Jumlah"]);
+      
+      var rows = data.data.map(function(item) {
+        return [item.id, item.date, item.type, item.description, item.amount];
+      });
+      
+      if (rows.length > 0) {
+        sheet.getRange(2, 1, rows.length, 5).setValues(rows);
+      }
+      
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Data synced successfully" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}</textarea>
+                </div>
 
-function getData() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  var data = sheet.getDataRange().getValues();
-  return ContentService.createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-```
+                <div class="p-3 bg-amber-50 text-amber-800 rounded-xl border border-amber-200 space-y-1">
+                    <p class="font-bold">Langkah Pengaturan Deploy:</p>
+                    <ol class="list-decimal list-inside space-y-0.5 text-[11px]">
+                        <li>Buka Google Sheet Anda &gt; menu <strong>Ekstensi</strong> &gt; <strong>Apps Script</strong>.</li>
+                        <li>Tempelkan kode di atas ke <code>Kode.gs</code> lalu Simpan.</li>
+                        <li>Klik <strong>Terapkan (Deploy)</strong> &gt; <strong>Penataan baru (New deployment)</strong>.</li>
+                        <li>Pilih Jenis: <strong>Aplikasi Web</strong>. Akses: <strong>Siapa saja (Anyone)</strong>.</li>
+                        <li>Salin URL Aplikasi Web yang dihasilkan ke kolom URL di atas.</li>
+                    </ol>
+                </div>
+            </div>
 
-*Klik **Deploy > New Deployment > Web App > "Anyone" > Deploy**.* (Salin URL Web App yang diberikan).
-
----
-
-### Langkah 2: Aplikasi Web (Frontend)
-
-Saya akan membuatkan aplikasi yang bisa langsung Anda gunakan. Salin kode ini ke editor Anda.
-
-```html:Aplikasi Laporan Keuangan:index.html
-<!DOCTYPE html>
-<html lang="id">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Laporan Keuangan</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-100 min-h-screen p-4">
-
-    <div class="max-w-md mx-auto bg-white rounded-xl shadow-md overflow-hidden md:max-w-2xl p-6">
-        <h1 class="text-2xl font-bold mb-4 text-center">Laporan Keuangan</h1>
-        
-        <div id="status" class="text-sm text-center mb-4 p-2 rounded">Memeriksa koneksi...</div>
-
-        <!-- Form Input -->
-        <div class="grid grid-cols-1 gap-4 mb-6">
-            <input type="date" id="date" class="border p-2 rounded w-full">
-            <select id="type" class="border p-2 rounded w-full">
-                <option value="Masuk">Pemasukan</option>
-                <option value="Keluar">Pengeluaran</option>
-            </select>
-            <input type="text" id="desc" placeholder="Keterangan" class="border p-2 rounded w-full">
-            <input type="number" id="amount" placeholder="Jumlah" class="border p-2 rounded w-full">
-            <button onclick="saveData()" class="bg-blue-500 text-white p-2 rounded font-bold hover:bg-blue-600">Simpan Data</button>
-        </div>
-
-        <!-- Filter -->
-        <div class="mb-4">
-            <label class="block text-sm font-medium">Filter Bulan:</label>
-            <input type="month" id="filterMonth" class="border p-2 rounded w-full">
-        </div>
-
-        <!-- Riwayat -->
-        <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse">
-                <thead><tr class="bg-gray-200"><th>Tanggal</th><th>Ket</th><th>Jumlah</th></tr></thead>
-                <tbody id="historyTable"></tbody>
-            </table>
-        </div>
-
-        <!-- Menu Script -->
-        <div class="mt-8 border-t pt-4">
-            <button onclick="showScript()" class="text-blue-500 underline text-sm">Lihat Kode Apps Script</button>
+            <div class="flex items-center justify-between pt-3 border-t border-slate-100">
+                <button type="button" onclick="app.disconnectSheet()" class="px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-xl transition">Putuskan Koneksi</button>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="app.closeModal('scriptModal')" class="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition">Tutup</button>
+                    <button type="button" onclick="app.saveScriptUrl()" class="px-4 py-2 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-700 rounded-xl transition shadow-md shadow-sky-100">Simpan & Uji Koneksi</button>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
-        const monthInput = document.getElementById('filterMonth');
-        const now = new Date();
-        monthInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const LOCAL_STORAGE_KEY = 'keuanganku_transactions';
+        const SCRIPT_URL_KEY = 'keuanganku_script_url';
 
-        function checkConnection() {
-            const status = document.getElementById('status');
-            // Simulasi koneksi
-            status.innerText = "Terhubung ke Spreadsheet ✅";
-            status.classList.add("bg-green-100", "text-green-800");
+        class FinanceApp {
+            constructor() {
+                this.transactions = [];
+                this.scriptUrl = localStorage.getItem(SCRIPT_URL_KEY) || '';
+                this.isConnected = false;
+                this.trendChart = null;
+                
+                this.init();
+            }
+
+            init() {
+                this.loadFromLocalStorage();
+                document.getElementById('scriptUrlInput').value = this.scriptUrl;
+                this.setDefaultDate();
+                this.renderCharts();
+                
+                if (this.scriptUrl) {
+                    this.checkConnection();
+                } else {
+                    this.updateStatusBadge(false, 'Tidak Terhubung');
+                    this.render();
+                }
+            }
+
+            setDefaultDate() {
+                const today = new Date().toISOString().split('T')[0];
+                document.getElementById('txDate').value = today;
+            }
+
+            loadFromLocalStorage() {
+                try {
+                    const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+                    this.transactions = raw ? JSON.parse(raw) : [];
+                } catch (e) {
+                    console.error('Failed loading local data', e);
+                    this.transactions = [];
+                }
+            }
+
+            saveToLocalStorage() {
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(this.transactions));
+            }
+
+            openModal(modalId) {
+                document.getElementById(modalId).classList.remove('hidden');
+            }
+
+            closeModal(modalId) {
+                document.getElementById(modalId).classList.add('hidden');
+                if (modalId === 'transactionModal') {
+                    this.resetTxForm();
+                }
+            }
+
+            resetTxForm() {
+                document.getElementById('txId').value = '';
+                document.getElementById('txForm').reset();
+                this.setDefaultDate();
+                document.getElementById('modalTxTitle').innerHTML = '<i class="fa-solid fa-plus-circle text-sky-600"></i> Tambah Transaksi Baru';
+            }
+
+            async checkConnection() {
+                if (!this.scriptUrl) {
+                    this.updateStatusBadge(false, 'Tidak Terhubung');
+                    return false;
+                }
+
+                this.updateStatusBadge(false, 'Memeriksa...', true);
+
+                try {
+                    const response = await fetch(`${this.scriptUrl}?action=ping`);
+                    const result = await response.json();
+                    if (result && result.status === 'success') {
+                        this.isConnected = true;
+                        this.updateStatusBadge(true, 'Terhubung');
+                        return true;
+                    } else {
+                        throw new Error('Respons tidak valid');
+                    }
+                } catch (err) {
+                    console.warn('Google Sheets connection error:', err);
+                    this.isConnected = false;
+                    this.updateStatusBadge(false, 'Tidak Terhubung');
+                    return false;
+                }
+            }
+
+            updateStatusBadge(connected, text, loading = false) {
+                const badge = document.getElementById('statusBadge');
+                const dot = document.getElementById('statusDot');
+                const ping = document.getElementById('statusPing');
+                const statusText = document.getElementById('statusText');
+
+                statusText.textContent = text;
+
+                if (loading) {
+                    badge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-600 border border-amber-200 transition-all duration-300';
+                    dot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500';
+                    ping.classList.remove('hidden');
+                    ping.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75';
+                } else if (connected) {
+                    badge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 transition-all duration-300';
+                    dot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500';
+                    ping.classList.remove('hidden');
+                    ping.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75';
+                } else {
+                    badge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-600 border border-rose-200 transition-all duration-300';
+                    dot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500';
+                    ping.classList.add('hidden');
+                }
+            }
+
+            async saveScriptUrl() {
+                const urlInput = document.getElementById('scriptUrlInput').value.trim();
+                if (!urlInput) {
+                    this.showToast('Masukkan URL Web App terlebih dahulu!', 'error');
+                    return;
+                }
+
+                this.scriptUrl = urlInput;
+                localStorage.setItem(SCRIPT_URL_KEY, urlInput);
+
+                const connected = await this.checkConnection();
+                if (connected) {
+                    this.showToast('Berhasil terhubung ke Google Sheets!', 'success');
+                    this.closeModal('scriptModal');
+                    this.syncData();
+                } else {
+                    this.showToast('Gagal terhubung. Pastikan URL benar & Deployment diset Anyone.', 'error');
+                }
+            }
+
+            disconnectSheet() {
+                this.scriptUrl = '';
+                localStorage.removeItem(SCRIPT_URL_KEY);
+                document.getElementById('scriptUrlInput').value = '';
+                this.isConnected = false;
+                this.updateStatusBadge(false, 'Tidak Terhubung');
+                this.showToast('Koneksi Google Sheets diputuskan', 'info');
+                this.closeModal('scriptModal');
+            }
+
+            copyScriptCode() {
+                const textarea = document.getElementById('appsScriptCode');
+                textarea.select();
+                textarea.setSelectionRange(0, 99999);
+
+                try {
+                    document.execCommand('copy');
+                    const copyBtnText = document.getElementById('copyBtnText');
+                    copyBtnText.textContent = 'Tersalin!';
+                    this.showToast('Kode Apps Script tersalin ke clipboard!', 'success');
+                    
+                    setTimeout(() => {
+                        copyBtnText.textContent = 'Salin Kode.gs';
+                    }, 2500);
+                } catch (err) {
+                    this.showToast('Gagal menyalin kode', 'error');
+                }
+            }
+
+            saveTransaction(e) {
+                e.preventDefault();
+                const id = document.getElementById('txId').value || Date.now().toString();
+                const type = document.querySelector('input[name="txType"]:checked').value;
+                const date = document.getElementById('txDate').value;
+                const amount = parseFloat(document.getElementById('txAmount').value);
+                const description = document.getElementById('txDescription').value.trim();
+
+                const newTx = { id, date, type, amount, description };
+
+                const existingIndex = this.transactions.findIndex(t => t.id === id);
+                if (existingIndex > -1) {
+                    this.transactions[existingIndex] = newTx;
+                    this.showToast('Transaksi berhasil diperbarui', 'success');
+                } else {
+                    this.transactions.unshift(newTx);
+                    this.showToast('Transaksi baru berhasil ditambahkan', 'success');
+                }
+
+                this.saveToLocalStorage();
+                this.closeModal('transactionModal');
+                this.render();
+
+                if (this.isConnected) {
+                    this.syncData();
+                }
+            }
+
+            editTransaction(id) {
+                const tx = this.transactions.find(t => t.id === id);
+                if (!tx) return;
+
+                document.getElementById('txId').value = tx.id;
+                document.querySelector(`input[name="txType"][value="${tx.type}"]`).checked = true;
+                
+                document.getElementById('txDate').value = tx.date;
+                document.getElementById('txAmount').value = tx.amount;
+                document.getElementById('txDescription').value = tx.description;
+
+                document.getElementById('modalTxTitle').innerHTML = '<i class="fa-solid fa-pen-to-square text-sky-600"></i> Edit Transaksi';
+                this.openModal('transactionModal');
+            }
+
+            deleteTransaction(id) {
+                if (confirm('Apakah Anda yakin ingin menghapus transaksi ini?')) {
+                    this.transactions = this.transactions.filter(t => t.id !== id);
+                    this.saveToLocalStorage();
+                    this.render();
+                    this.showToast('Transaksi dihapus', 'info');
+
+                    if (this.isConnected) {
+                        this.syncData();
+                    }
+                }
+            }
+
+            clearAllData() {
+                if (confirm('Apakah Anda yakin ingin mengosongkan semua data transaksi?')) {
+                    this.transactions = [];
+                    this.saveToLocalStorage();
+                    this.render();
+                    this.showToast('Semua data transaksi berhasil dikosongkan', 'info');
+
+                    if (this.isConnected) {
+                        this.syncData();
+                    }
+                }
+            }
+
+            async syncData() {
+                if (!this.scriptUrl) {
+                    this.showToast('Atur URL Google Apps Script terlebih dahulu', 'info');
+                    this.openModal('scriptModal');
+                    return;
+                }
+
+                const syncIcon = document.getElementById('syncIcon');
+                if (syncIcon) syncIcon.classList.add('fa-spin');
+
+                try {
+                    const response = await fetch(this.scriptUrl, {
+                        method: 'POST',
+                        mode: 'cors',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({
+                            action: 'syncAll',
+                            data: this.transactions
+                        })
+                    });
+
+                    const result = await response.json();
+                    if (result && result.status === 'success') {
+                        this.showToast('Berhasil disinkronkan ke Google Sheet!', 'success');
+                        this.isConnected = true;
+                        this.updateStatusBadge(true, 'Terhubung');
+                    } else {
+                        throw new Error(result.message || 'Gagal sinkronisasi');
+                    }
+                } catch (err) {
+                    console.error('Sync failed:', err);
+                    this.showToast('Gagal menyinkronkan data ke Sheet', 'error');
+                } finally {
+                    if (syncIcon) syncIcon.classList.remove('fa-spin');
+                }
+            }
+
+            getFilteredTransactions() {
+                const search = document.getElementById('searchInput').value.toLowerCase();
+                const type = document.getElementById('filterType').value;
+                const date = document.getElementById('filterDate').value;
+
+                return this.transactions.filter(tx => {
+                    const matchesSearch = tx.description.toLowerCase().includes(search);
+                    const matchesType = type === 'ALL' || tx.type === type;
+                    const matchesDate = !date || tx.date === date;
+
+                    return matchesSearch && matchesType && matchesDate;
+                });
+            }
+
+            filterTransactions() {
+                this.renderTable();
+            }
+
+            resetFilters() {
+                document.getElementById('searchInput').value = '';
+                document.getElementById('filterType').value = 'ALL';
+                document.getElementById('filterDate').value = '';
+                this.renderTable();
+            }
+
+            render() {
+                this.renderSummaryCards();
+                this.renderTable();
+                this.updateCharts();
+            }
+
+            renderSummaryCards() {
+                let totalIncome = 0;
+                let totalExpense = 0;
+                let incomeCount = 0;
+                let expenseCount = 0;
+
+                this.transactions.forEach(t => {
+                    const amt = Number(t.amount) || 0;
+                    if (t.type === 'PEMASUKAN') {
+                        totalIncome += amt;
+                        incomeCount++;
+                    } else if (t.type === 'PENGELUARAN') {
+                        totalExpense += amt;
+                        expenseCount++;
+                    }
+                });
+
+                const netBalance = totalIncome - totalExpense;
+
+                document.getElementById('totalBalance').textContent = this.formatRupiah(netBalance);
+                document.getElementById('totalIncome').textContent = this.formatRupiah(totalIncome);
+                document.getElementById('totalExpense').textContent = this.formatRupiah(totalExpense);
+
+                document.getElementById('transactionCount').textContent = this.transactions.length;
+                document.getElementById('incomeCount').textContent = incomeCount;
+                document.getElementById('expenseCount').textContent = expenseCount;
+            }
+
+            renderTable() {
+                const filtered = this.getFilteredTransactions();
+                const tbody = document.getElementById('transactionTableBody');
+                const emptyState = document.getElementById('emptyState');
+                const countLabel = document.getElementById('filteredCountLabel');
+
+                countLabel.textContent = `Menampilkan ${filtered.length} data`;
+
+                if (filtered.length === 0) {
+                    tbody.innerHTML = '';
+                    emptyState.classList.remove('hidden');
+                    return;
+                }
+
+                emptyState.classList.add('hidden');
+
+                const sorted = [...filtered].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+                tbody.innerHTML = sorted.map(tx => {
+                    const isIncome = tx.type === 'PEMASUKAN';
+                    const badgeClass = isIncome 
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                        : 'bg-rose-50 text-rose-700 border-rose-200';
+                    const amountClass = isIncome ? 'text-emerald-600' : 'text-rose-600';
+                    const sign = isIncome ? '+' : '-';
+
+                    return `
+                        <tr class="hover:bg-slate-50/80 transition group">
+                            <td class="py-3 px-4 font-mono text-xs text-slate-500">${this.formatDate(tx.date)}</td>
+                            <td class="py-3 px-4">
+                                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold border ${badgeClass}">
+                                    ${tx.type}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4 text-slate-600 max-w-xs truncate" title="${this.escapeHtml(tx.description)}">${this.escapeHtml(tx.description)}</td>
+                            <td class="py-3 px-4 text-right font-bold ${amountClass}">
+                                ${sign} ${this.formatRupiah(tx.amount)}
+                            </td>
+                            <td class="py-3 px-4 text-center">
+                                <div class="flex items-center justify-center gap-1">
+                                    <button onclick="app.editTransaction('${tx.id}')" title="Edit" class="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition">
+                                        <i class="fa-solid fa-pen-to-square"></i>
+                                    </button>
+                                    <button onclick="app.deleteTransaction('${tx.id}')" title="Hapus" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+
+            renderCharts() {
+                // Monthly Trend Chart
+                const ctxTrend = document.getElementById('monthlyTrendChart').getContext('2d');
+                this.trendChart = new Chart(ctxTrend, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Pemasukan vs Pengeluaran'],
+                        datasets: [
+                            { label: 'Pemasukan', data: [0], backgroundColor: '#10b981', borderRadius: 6 },
+                            { label: 'Pengeluaran', data: [0], backgroundColor: '#f43f5e', borderRadius: 6 }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: { y: { beginAtZero: true } },
+                        plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } }
+                    }
+                });
+            }
+
+            updateCharts() {
+                if (!this.trendChart) return;
+
+                let incSum = 0;
+                let expSum = 0;
+                this.transactions.forEach(t => {
+                    const amt = Number(t.amount) || 0;
+                    if (t.type === 'PEMASUKAN') incSum += amt;
+                    if (t.type === 'PENGELUARAN') expSum += amt;
+                });
+
+                this.trendChart.data.datasets[0].data = [incSum];
+                this.trendChart.data.datasets[1].data = [expSum];
+                this.trendChart.update();
+            }
+
+            exportCSV() {
+                if (this.transactions.length === 0) {
+                    this.showToast('Tidak ada data untuk diekspor', 'info');
+                    return;
+                }
+
+                let csvContent = 'data:text/csv;charset=utf-8,ID,Tanggal,Jenis,Keterangan,Jumlah\n';
+                this.transactions.forEach(t => {
+                    const row = `"${t.id}","${t.date}","${t.type}","${t.description.replace(/"/g, '""')}",${t.amount}`;
+                    csvContent += row + '\n';
+                });
+
+                const encodedUri = encodeURI(csvContent);
+                const link = document.createElement('a');
+                link.setAttribute('href', encodedUri);
+                link.setAttribute('download', `riwayat_keuangan_${new Date().toISOString().split('T')[0]}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                this.showToast('File CSV berhasil diunduh', 'success');
+            }
+
+            formatRupiah(number) {
+                return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(number);
+            }
+
+            formatDate(dateStr) {
+                if (!dateStr) return '-';
+                const parts = dateStr.split('-');
+                if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                return dateStr;
+            }
+
+            escapeHtml(str) {
+                return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            }
+
+            showToast(message, type = 'info') {
+                const container = document.getElementById('toastContainer');
+                const toast = document.createElement('div');
+                
+                let bgClass = 'bg-slate-800 text-white';
+                let iconClass = 'fa-circle-info text-sky-400';
+
+                if (type === 'success') {
+                    bgClass = 'bg-slate-900 text-white border-l-4 border-emerald-500';
+                    iconClass = 'fa-circle-check text-emerald-400';
+                } else if (type === 'error') {
+                    bgClass = 'bg-slate-900 text-white border-l-4 border-rose-500';
+                    iconClass = 'fa-circle-xmark text-rose-400';
+                }
+
+                toast.className = `p-3 rounded-xl shadow-lg flex items-center gap-3 text-xs font-medium transform transition-all duration-300 translate-y-2 opacity-0 pointer-events-auto ${bgClass}`;
+                toast.innerHTML = `<i class="fa-solid ${iconClass} text-base"></i><span>${message}</span>`;
+
+                container.appendChild(toast);
+
+                setTimeout(() => {
+                    toast.classList.remove('translate-y-2', 'opacity-0');
+                }, 10);
+
+                setTimeout(() => {
+                    toast.classList.add('opacity-0', '-translate-y-2');
+                    setTimeout(() => toast.remove(), 300);
+                }, 3000);
+            }
         }
 
-        function saveData() {
-            alert("Data berhasil dikirim ke Spreadsheet (Simulasi)");
-        }
-
-        function showScript() {
-            alert("Copy kode.gs dari instruksi di atas dan paste ke editor Apps Script Anda!");
-        }
-
-        window.onload = checkConnection;
+        // Initialize application on page load
+        let app;
+        window.addEventListener('DOMContentLoaded', () => {
+            // Force clear initial localStorage to ensure standard fresh start
+            localStorage.removeItem(LOCAL_STORAGE_KEY);
+            app = new FinanceApp();
+        });
     </script>
 </body>
 </html>
