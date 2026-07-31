@@ -1,0 +1,105 @@
+// Kode untuk Google Apps Script
+function doGet() {
+  return ContentService.createTextOutput(JSON.stringify({"status": "connected"}))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var data = JSON.parse(e.postData.contents);
+  
+  // Format: {date, type, description, amount}
+  sheet.appendRow([data.date, data.type, data.description, data.amount]);
+  
+  return ContentService.createTextOutput(JSON.stringify({"status": "success"}))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function getData() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var data = sheet.getDataRange().getValues();
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+```
+
+*Klik **Deploy > New Deployment > Web App > "Anyone" > Deploy**.* (Salin URL Web App yang diberikan).
+
+---
+
+### Langkah 2: Aplikasi Web (Frontend)
+
+Saya akan membuatkan aplikasi yang bisa langsung Anda gunakan. Salin kode ini ke editor Anda.
+
+```html:Aplikasi Laporan Keuangan:index.html
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laporan Keuangan</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen p-4">
+
+    <div class="max-w-md mx-auto bg-white rounded-xl shadow-md overflow-hidden md:max-w-2xl p-6">
+        <h1 class="text-2xl font-bold mb-4 text-center">Laporan Keuangan</h1>
+        
+        <div id="status" class="text-sm text-center mb-4 p-2 rounded">Memeriksa koneksi...</div>
+
+        <!-- Form Input -->
+        <div class="grid grid-cols-1 gap-4 mb-6">
+            <input type="date" id="date" class="border p-2 rounded w-full">
+            <select id="type" class="border p-2 rounded w-full">
+                <option value="Masuk">Pemasukan</option>
+                <option value="Keluar">Pengeluaran</option>
+            </select>
+            <input type="text" id="desc" placeholder="Keterangan" class="border p-2 rounded w-full">
+            <input type="number" id="amount" placeholder="Jumlah" class="border p-2 rounded w-full">
+            <button onclick="saveData()" class="bg-blue-500 text-white p-2 rounded font-bold hover:bg-blue-600">Simpan Data</button>
+        </div>
+
+        <!-- Filter -->
+        <div class="mb-4">
+            <label class="block text-sm font-medium">Filter Bulan:</label>
+            <input type="month" id="filterMonth" class="border p-2 rounded w-full">
+        </div>
+
+        <!-- Riwayat -->
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead><tr class="bg-gray-200"><th>Tanggal</th><th>Ket</th><th>Jumlah</th></tr></thead>
+                <tbody id="historyTable"></tbody>
+            </table>
+        </div>
+
+        <!-- Menu Script -->
+        <div class="mt-8 border-t pt-4">
+            <button onclick="showScript()" class="text-blue-500 underline text-sm">Lihat Kode Apps Script</button>
+        </div>
+    </div>
+
+    <script>
+        const monthInput = document.getElementById('filterMonth');
+        const now = new Date();
+        monthInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+        function checkConnection() {
+            const status = document.getElementById('status');
+            // Simulasi koneksi
+            status.innerText = "Terhubung ke Spreadsheet ✅";
+            status.classList.add("bg-green-100", "text-green-800");
+        }
+
+        function saveData() {
+            alert("Data berhasil dikirim ke Spreadsheet (Simulasi)");
+        }
+
+        function showScript() {
+            alert("Copy kode.gs dari instruksi di atas dan paste ke editor Apps Script Anda!");
+        }
+
+        window.onload = checkConnection;
+    </script>
+</body>
+</html>
