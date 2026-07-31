@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OCC Inventori</title>
+    <title>Kas Inventori</title>
     
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -87,7 +87,7 @@
                         <i class="fa-solid font-bold fa-wallet text-xl"></i>
                     </div>
                     <div>
-                        <h1 class="font-bold text-lg text-slate-900 leading-tight">OCC Inventori</h1>
+                        <h1 class="font-bold text-lg text-slate-900 leading-tight">Kas Inventori</h1>
                         <p class="text-xs text-slate-500 hidden sm:block">Riwayat Transaksi & Google Sheets Sync</p>
                     </div>
                 </div>
@@ -103,16 +103,10 @@
                         <span id="statusText">Tidak Terhubung</span>
                     </div>
 
-                    <!-- Fetch Button (Tarik dari Sheet) -->
-                    <button id="btnFetchNow" onclick="app.fetchFromSheet()" title="Tarik / Baca data dari Google Sheet" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition active:scale-95">
-                        <i class="fa-solid fa-cloud-arrow-down text-emerald-600" id="fetchIcon"></i>
-                        <span class="hidden sm:inline">Tarik dari Sheet</span>
-                    </button>
-
-                    <!-- Sync Button (Kirim ke Sheet) -->
-                    <button id="btnSyncNow" onclick="app.syncData()" title="Kirim data aplikasi ke Google Sheet" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition active:scale-95">
-                        <i class="fa-solid fa-cloud-arrow-up text-sky-600" id="syncIcon"></i>
-                        <span class="hidden sm:inline">Kirim ke Sheet</span>
+                    <!-- Single Unified Sync Button -->
+                    <button id="btnSyncNow" onclick="app.syncData()" title="Sinkronkan data dengan Google Sheet" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg transition active:scale-95">
+                        <i class="fa-solid fa-rotate text-sky-600" id="syncIcon"></i>
+                        <span class="hidden sm:inline">Sinkronkan</span>
                     </button>
 
                     <!-- Apps Script Config Button -->
@@ -337,7 +331,7 @@
                 <!-- Description -->
                 <div>
                     <label class="block text-xs font-semibold text-slate-600 mb-1">Keterangan</label>
-                    <input type="text" id="txDescription" placeholder="Contoh: Data" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500">
+                    <input type="text" id="txDescription" placeholder="Contoh: Gaji Bulanan / Beli Makan Siang" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500">
                 </div>
 
                 <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
@@ -607,7 +601,9 @@ function getSheetDataResponse() {
                 if (connected) {
                     this.showToast('Berhasil terhubung ke Google Sheets!', 'success');
                     this.closeModal('scriptModal');
-                    this.syncData();
+                    
+                    // Otomatis sinkronisasi saat terhubung
+                    await this.syncData();
                 } else {
                     this.showToast('Gagal terhubung. Pastikan URL benar & Deployment diset Anyone.', 'error');
                 }
@@ -711,43 +707,6 @@ function getSheetDataResponse() {
                 }
             }
 
-            async fetchFromSheet() {
-                if (!this.scriptUrl) {
-                    this.showToast('Atur URL Google Apps Script terlebih dahulu', 'info');
-                    this.openModal('scriptModal');
-                    return;
-                }
-
-                const fetchIcon = document.getElementById('fetchIcon');
-                if (fetchIcon) fetchIcon.classList.add('fa-spin');
-
-                try {
-                    const response = await fetch(this.scriptUrl, {
-                        method: 'POST',
-                        mode: 'cors',
-                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                        body: JSON.stringify({ action: 'fetchAll' })
-                    });
-
-                    const result = await response.json();
-                    if (result && result.status === 'success' && Array.isArray(result.data)) {
-                        this.transactions = result.data;
-                        this.saveToLocalStorage();
-                        this.render();
-                        this.showToast(`Berhasil membaca ${result.data.length} data dari Google Sheet!`, 'success');
-                        this.isConnected = true;
-                        this.updateStatusBadge(true, 'Terhubung');
-                    } else {
-                        throw new Error(result.message || 'Gagal membaca data dari Google Sheet');
-                    }
-                } catch (err) {
-                    console.error('Fetch failed:', err);
-                    this.showToast('Gagal membaca data. Pastikan Kode.gs telah diperbarui di Google Sheet Anda.', 'error');
-                } finally {
-                    if (fetchIcon) fetchIcon.classList.remove('fa-spin');
-                }
-            }
-
             async syncData() {
                 if (!this.scriptUrl) {
                     this.showToast('Atur URL Google Apps Script terlebih dahulu', 'info');
@@ -759,6 +718,28 @@ function getSheetDataResponse() {
                 if (syncIcon) syncIcon.classList.add('fa-spin');
 
                 try {
+                    // Jika data lokal di aplikasi masih kosong, baca/tarik data dari Google Sheet dulu
+                    if (this.transactions.length === 0) {
+                        const fetchResponse = await fetch(this.scriptUrl, {
+                            method: 'POST',
+                            mode: 'cors',
+                            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                            body: JSON.stringify({ action: 'fetchAll' })
+                        });
+
+                        const fetchResult = await fetchResponse.json();
+                        if (fetchResult && fetchResult.status === 'success' && Array.isArray(fetchResult.data)) {
+                            this.transactions = fetchResult.data;
+                            this.saveToLocalStorage();
+                            this.render();
+                            this.showToast(`Sinkronisasi berhasil! Membaca ${fetchResult.data.length} data dari Google Sheet`, 'success');
+                            this.isConnected = true;
+                            this.updateStatusBadge(true, 'Terhubung');
+                            return;
+                        }
+                    }
+
+                    // Jika ada data di aplikasi, kirim/selaraskan ke Google Sheet
                     const response = await fetch(this.scriptUrl, {
                         method: 'POST',
                         mode: 'cors',
@@ -771,7 +752,7 @@ function getSheetDataResponse() {
 
                     const result = await response.json();
                     if (result && result.status === 'success') {
-                        this.showToast('Berhasil disinkronkan ke Google Sheet!', 'success');
+                        this.showToast('Berhasil sinkronisasi dengan Google Sheet!', 'success');
                         this.isConnected = true;
                         this.updateStatusBadge(true, 'Terhubung');
                     } else {
@@ -779,7 +760,7 @@ function getSheetDataResponse() {
                     }
                 } catch (err) {
                     console.error('Sync failed:', err);
-                    this.showToast('Gagal menyinkronkan data ke Sheet', 'error');
+                    this.showToast('Gagal menyinkronkan data dengan Google Sheet', 'error');
                 } finally {
                     if (syncIcon) syncIcon.classList.remove('fa-spin');
                 }
@@ -1010,8 +991,6 @@ function getSheetDataResponse() {
         // Initialize application on page load
         let app;
         window.addEventListener('DOMContentLoaded', () => {
-            // Force clear initial localStorage to ensure standard fresh start
-            localStorage.removeItem(LOCAL_STORAGE_KEY);
             app = new FinanceApp();
         });
     </script>
