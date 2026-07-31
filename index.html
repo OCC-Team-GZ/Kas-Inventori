@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kas Inventory</title>
+    <title>OCC Inventori</title>
     
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -103,10 +103,16 @@
                         <span id="statusText">Tidak Terhubung</span>
                     </div>
 
-                    <!-- Sync Button -->
-                    <button id="btnSyncNow" onclick="app.syncData()" title="Sinkronkan data ke Google Sheet" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition active:scale-95">
-                        <i class="fa-solid fa-rotate text-slate-500" id="syncIcon"></i>
-                        <span class="hidden sm:inline">Sync Sheet</span>
+                    <!-- Fetch Button (Tarik dari Sheet) -->
+                    <button id="btnFetchNow" onclick="app.fetchFromSheet()" title="Tarik / Baca data dari Google Sheet" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition active:scale-95">
+                        <i class="fa-solid fa-cloud-arrow-down text-emerald-600" id="fetchIcon"></i>
+                        <span class="hidden sm:inline">Tarik dari Sheet</span>
+                    </button>
+
+                    <!-- Sync Button (Kirim ke Sheet) -->
+                    <button id="btnSyncNow" onclick="app.syncData()" title="Kirim data aplikasi ke Google Sheet" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition active:scale-95">
+                        <i class="fa-solid fa-cloud-arrow-up text-sky-600" id="syncIcon"></i>
+                        <span class="hidden sm:inline">Kirim ke Sheet</span>
                     </button>
 
                     <!-- Apps Script Config Button -->
@@ -201,7 +207,7 @@
 
         <!-- Transactions Table Section -->
         <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-            <div class="px-5 py-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="px-5 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 <div>
                     <h3 class="font-bold text-slate-800 text-base flex items-center gap-2">
                         <i class="fa-solid fa-list text-sky-600"></i>
@@ -210,11 +216,14 @@
                     <span id="filteredCountLabel" class="text-xs font-medium text-slate-500">Menampilkan 0 data</span>
                 </div>
 
-                <!-- Controls Group: Filter Bulanan, Filter Jenis, Unduh, Cetak -->
+                <!-- Controls Group: Filter Bulanan, Filter Jenis, Unduh Riwayat, Cetak -->
                 <div class="flex flex-wrap items-center gap-2 no-print">
                     <!-- Filter Bulanan (Otomatis Bulan Sekarang) -->
-                    <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5" title="Pilih Bulan">
-                        <i class="fa-regular fa-calendar-days text-slate-400 text-xs"></i>
+                    <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5" title="Filter Bulanan">
+                        <label for="filterMonth" class="text-xs font-semibold text-slate-600 flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
+                            <i class="fa-regular fa-calendar-days text-sky-600 text-xs"></i>
+                            <span>Filter Bulan:</span>
+                        </label>
                         <input type="month" id="filterMonth" onchange="app.filterTransactions()" class="bg-transparent text-xs font-semibold text-slate-700 focus:outline-none cursor-pointer">
                     </div>
 
@@ -225,17 +234,18 @@
                         <option value="PENGELUARAN">Pengeluaran</option>
                     </select>
 
-                    <!-- Reset Filter Button -->
-                    <button onclick="app.resetFilters()" title="Reset ke Bulan Sekarang" class="p-1.5 text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition text-xs">
-                        <i class="fa-solid fa-rotate-left"></i>
+                    <!-- Reset ke Bulan Sekarang Button -->
+                    <button onclick="app.resetFilters()" title="Kembali ke Bulan Sekarang" class="px-2.5 py-1.5 text-slate-600 hover:text-sky-600 bg-slate-100 hover:bg-sky-50 rounded-xl transition text-xs font-semibold flex items-center gap-1.5">
+                        <i class="fa-solid fa-rotate-left text-xs"></i>
+                        <span>Bulan Ini</span>
                     </button>
 
                     <div class="h-5 w-px bg-slate-200 mx-0.5 hidden sm:block"></div>
 
                     <!-- Tombol Unduh Riwayat -->
                     <button onclick="app.exportCSV()" title="Unduh Riwayat Transaksi (CSV)" class="px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition flex items-center gap-1.5 shadow-sm active:scale-95">
-                        <i class="fa-solid fa-download text-xs"></i>
-                        <span>Unduh</span>
+                        <i class="fa-solid fa-file-excel text-xs"></i>
+                        <span>Unduh Riwayat</span>
                     </button>
 
                     <!-- Tombol Cetak -->
@@ -245,7 +255,7 @@
                     </button>
 
                     <!-- Tombol Kosongkan Data -->
-                    <button onclick="app.clearAllData()" title="Kosongkan Semua Data" class="p-1.5 text-rose-600 hover:bg-rose-50 rounded-xl transition text-xs border border-rose-200">
+                    <button onclick="app.clearAllData()" title="Kosongkan Semua Data" class="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition text-xs border border-rose-200">
                         <i class="fa-solid fa-trash-arrow-up"></i>
                     </button>
                 </div>
@@ -327,7 +337,7 @@
                 <!-- Description -->
                 <div>
                     <label class="block text-xs font-semibold text-slate-600 mb-1">Keterangan</label>
-                    <input type="text" id="txDescription" placeholder="Isi data" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500">
+                    <input type="text" id="txDescription" placeholder="Contoh: Data" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500">
                 </div>
 
                 <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
@@ -358,34 +368,42 @@
 
                 <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
                     <div class="flex items-center justify-between">
-                        <span class="font-bold text-slate-700">Kode Google Apps Script (Kode.gs):</span>
+                        <span class="font-bold text-slate-700">Kode Google Apps Script Terbaru (Kode.gs):</span>
                         <button onclick="app.copyScriptCode()" class="text-sky-600 hover:text-sky-700 font-semibold flex items-center gap-1">
                             <i class="fa-regular fa-copy"></i> <span id="copyBtnText">Salin Kode.gs</span>
                         </button>
                     </div>
-                    <textarea id="appsScriptCode" readonly class="w-full h-32 p-2.5 bg-slate-900 text-slate-200 font-mono text-[11px] rounded-lg border border-slate-700 focus:outline-none custom-scrollbar">
+                    <textarea id="appsScriptCode" readonly class="w-full h-36 p-2.5 bg-slate-900 text-slate-200 font-mono text-[11px] rounded-lg border border-slate-700 focus:outline-none custom-scrollbar">
 function doGet(e) {
-  return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "KeuanganKu API Ready" }))
-    .setMimeType(ContentService.MimeType.JSON);
+  try {
+    var action = e && e.parameter ? e.parameter.action : "";
+    if (action === "fetchAll") {
+      return getSheetDataResponse();
+    }
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "KeuanganKu API Ready" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
 }
 
 function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-    
+    if (data.action === "fetchAll") {
+      return getSheetDataResponse();
+    }
     if (data.action === "syncAll") {
+      var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
       sheet.clear();
       sheet.appendRow(["ID", "Tanggal", "Jenis", "Keterangan", "Jumlah"]);
-      
-      var rows = data.data.map(function(item) {
+      var rows = (data.data || []).map(function(item) {
         return [item.id, item.date, item.type, item.description, item.amount];
       });
-      
       if (rows.length > 0) {
         sheet.getRange(2, 1, rows.length, 5).setValues(rows);
       }
-      
       return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Data synced successfully" }))
         .setMimeType(ContentService.MimeType.JSON);
     }
@@ -393,6 +411,34 @@ function doPost(e) {
     return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+function getSheetDataResponse() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", data: [] }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  var values = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+  var items = values.map(function(row) {
+    var dateVal = row[1];
+    if (dateVal instanceof Date) {
+      var yyyy = dateVal.getFullYear();
+      var mm = String(dateVal.getMonth() + 1).padStart(2, '0');
+      var dd = String(dateVal.getDate()).padStart(2, '0');
+      dateVal = yyyy + '-' + mm + '-' + dd;
+    }
+    return {
+      id: String(row[0] || Date.now()),
+      date: String(dateVal || ''),
+      type: String(row[2] || 'PEMASUKAN'),
+      description: String(row[3] || ''),
+      amount: Number(row[4] || 0)
+    };
+  });
+  return ContentService.createTextOutput(JSON.stringify({ status: "success", data: items }))
+    .setMimeType(ContentService.MimeType.JSON);
 }</textarea>
                 </div>
 
@@ -453,7 +499,6 @@ function doPost(e) {
             }
 
             setDefaultMonth() {
-                // Set default month filter to current YYYY-MM
                 const now = new Date();
                 const year = now.getFullYear();
                 const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -663,6 +708,43 @@ function doPost(e) {
                     if (this.isConnected) {
                         this.syncData();
                     }
+                }
+            }
+
+            async fetchFromSheet() {
+                if (!this.scriptUrl) {
+                    this.showToast('Atur URL Google Apps Script terlebih dahulu', 'info');
+                    this.openModal('scriptModal');
+                    return;
+                }
+
+                const fetchIcon = document.getElementById('fetchIcon');
+                if (fetchIcon) fetchIcon.classList.add('fa-spin');
+
+                try {
+                    const response = await fetch(this.scriptUrl, {
+                        method: 'POST',
+                        mode: 'cors',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({ action: 'fetchAll' })
+                    });
+
+                    const result = await response.json();
+                    if (result && result.status === 'success' && Array.isArray(result.data)) {
+                        this.transactions = result.data;
+                        this.saveToLocalStorage();
+                        this.render();
+                        this.showToast(`Berhasil membaca ${result.data.length} data dari Google Sheet!`, 'success');
+                        this.isConnected = true;
+                        this.updateStatusBadge(true, 'Terhubung');
+                    } else {
+                        throw new Error(result.message || 'Gagal membaca data dari Google Sheet');
+                    }
+                } catch (err) {
+                    console.error('Fetch failed:', err);
+                    this.showToast('Gagal membaca data. Pastikan Kode.gs telah diperbarui di Google Sheet Anda.', 'error');
+                } finally {
+                    if (fetchIcon) fetchIcon.classList.remove('fa-spin');
                 }
             }
 
