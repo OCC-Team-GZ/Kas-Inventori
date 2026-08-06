@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kas Inventori</title>
+    <title>Pencatat Keuangan & Google Sheets Sync</title>
     <!-- Tailwind CSS for modern styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome for icons -->
@@ -50,7 +50,7 @@
                     <i class="fa-solid fa-wallet text-xl"></i>
                 </div>
                 <div>
-                    <h1 class="font-bold text-slate-900 text-lg leading-tight">Kas Inventori</h1>
+                    <h1 class="font-bold text-slate-900 text-lg leading-tight">Kas Inventory</h1>
                     <p class="text-xs text-slate-500">Pencatat Pemasukan & Pengeluaran Google Sheets</p>
                 </div>
             </div>
@@ -95,33 +95,42 @@
             <span id="toast-msg">Notifikasi pesan...</span>
         </div>
 
-        <!-- Summary Cards -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <!-- Summary Cards (4 Cards) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
                 <div>
-                    <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Pemasukan</p>
-                    <h3 id="summary-income" class="text-2xl font-bold text-emerald-600 mt-1">Rp 0</h3>
+                    <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Pemasukan Bulan Ini</p>
+                    <h3 id="summary-income" class="text-xl sm:text-2xl font-bold text-emerald-600 mt-1">Rp 0</h3>
                 </div>
-                <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center text-xl">
+                <div class="w-11 h-11 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center text-lg">
                     <i class="fa-solid fa-arrow-trend-up"></i>
                 </div>
             </div>
             <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
                 <div>
-                    <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Pengeluaran</p>
-                    <h3 id="summary-expense" class="text-2xl font-bold text-rose-600 mt-1">Rp 0</h3>
+                    <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Pengeluaran Bulan Ini</p>
+                    <h3 id="summary-expense" class="text-xl sm:text-2xl font-bold text-rose-600 mt-1">Rp 0</h3>
                 </div>
-                <div class="w-12 h-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center text-xl">
+                <div class="w-11 h-11 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center text-lg">
                     <i class="fa-solid fa-arrow-trend-down"></i>
                 </div>
             </div>
             <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
                 <div>
-                    <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Saldo Bersih</p>
-                    <h3 id="summary-balance" class="text-2xl font-bold text-indigo-600 mt-1">Rp 0</h3>
+                    <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Saldo Bulan Ini</p>
+                    <h3 id="summary-balance" class="text-xl sm:text-2xl font-bold text-indigo-600 mt-1">Rp 0</h3>
                 </div>
-                <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-xl">
+                <div class="w-11 h-11 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-lg">
                     <i class="fa-solid fa-wallet"></i>
+                </div>
+            </div>
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Saldo Total (Semua)</p>
+                    <h3 id="summary-alltime-balance" class="text-xl sm:text-2xl font-bold text-cyan-600 mt-1">Rp 0</h3>
+                </div>
+                <div class="w-11 h-11 bg-cyan-50 text-cyan-600 rounded-xl flex items-center justify-center text-lg">
+                    <i class="fa-solid fa-vault"></i>
                 </div>
             </div>
         </div>
@@ -508,7 +517,7 @@ function doGet(e) {
                 if (connected) {
                     badge.className = "hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200";
                     dot.className = "w-2 h-2 rounded-full bg-emerald-500";
-                    text.innerText = "Terhubung ke Spreadsheet";
+                    text.innerText = "Terhubung";
                     if (mobileDot) mobileDot.className = "w-2 h-2 rounded-full bg-emerald-500";
                     if (mobileText) mobileText.innerText = "Status: Terhubung";
                 } else {
@@ -771,6 +780,16 @@ function doGet(e) {
             let totalIncome = 0;
             let totalExpense = 0;
 
+            // Calculate all-time totals regardless of active filter
+            let allTimeIncome = 0;
+            let allTimeExpense = 0;
+            transactions.forEach(t => {
+                const amt = parseFloat(t.amount) || 0;
+                if (t.type === 'Pemasukan') allTimeIncome += amt;
+                else allTimeExpense += amt;
+            });
+            const allTimeBalance = allTimeIncome - allTimeExpense;
+
             if (filtered.length === 0) {
                 tbody.innerHTML = `
                     <tr>
@@ -828,7 +847,13 @@ function doGet(e) {
             const balanceEl = document.getElementById('summary-balance');
             if (balanceEl) {
                 balanceEl.innerText = `Rp ${balance.toLocaleString('id-ID')}`;
-                balanceEl.className = `text-2xl font-bold mt-1 ${balance >= 0 ? 'text-indigo-600' : 'text-rose-600'}`;
+                balanceEl.className = `text-xl sm:text-2xl font-bold mt-1 ${balance >= 0 ? 'text-indigo-600' : 'text-rose-600'}`;
+            }
+
+            const allTimeBalanceEl = document.getElementById('summary-alltime-balance');
+            if (allTimeBalanceEl) {
+                allTimeBalanceEl.innerText = `Rp ${allTimeBalance.toLocaleString('id-ID')}`;
+                allTimeBalanceEl.className = `text-xl sm:text-2xl font-bold mt-1 ${allTimeBalance >= 0 ? 'text-cyan-600' : 'text-rose-600'}`;
             }
         }
 
