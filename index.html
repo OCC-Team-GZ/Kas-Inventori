@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pencatat Keuangan & Google Sheets Sync</title>
+    <!-- Tailwind CSS for modern styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #printable-area, #printable-area * {
+                visibility: visible;
+            }
+            #printable-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+            .no-print {
+            display: none !important;
+        }
+    }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col">
+
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-indigo-600 text-white p-2.5 rounded-xl shadow-md shadow-indigo-100 flex items-center justify-center">
+                    <i class="fa-solid fa-wallet text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-slate-900 text-lg leading-tight">Kas Inventory</h1>
+                    <p class="text-xs text-slate-500">Pencatat Pemasukan & Pengeluaran Google Sheets</p>
+                </div>
+            </div>
+
+            <!-- Connection Status & Sync Controls -->
+            <div class="flex items-center space-x-3">
+                <!-- Status Badge -->
+                <div id="connection-badge" class="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                    <span id="status-dot" class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                    <span id="status-text">Belum Terhubung</span>
+                </div>
+
+                <!-- Sync Icon Button -->
+                <button onclick="triggerSync()" title="Sinkronisasi Data" class="p-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 transition relative group">
+                    <i id="sync-icon" class="fa-solid fa-rotate text-sm"></i>
+                    <span class="absolute -bottom-8 right-0 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap">Sinkronisasi</span>
+                </button>
+
+                <!-- Connection Settings Modal Trigger -->
+                <button onclick="openConfigModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-sm transition flex items-center space-x-2">
+                    <i class="fa-solid fa-link text-xs"></i>
+                    <span>Koneksi GAS</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- Mobile Connection Status Banner -->
+        <div id="mobile-banner" class="sm:hidden bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center justify-between text-xs text-amber-800">
+            <div class="flex items-center space-x-2">
+                <span id="mobile-status-dot" class="w-2 h-2 rounded-full bg-amber-500"></span>
+                <span id="mobile-status-text">Status: Belum Terhubung ke Apps Script</span>
+            </div>
+            <button onclick="openConfigModal()" class="underline font-semibold">Atur</button>
+        </div>
+
+        <!-- Notification Toast -->
+        <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 max-w-sm bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl flex items-center space-x-3 text-sm">
+            <i id="toast-icon" class="fa-solid fa-circle-info text-blue-400"></i>
+            <span id="toast-msg">Notifikasi pesan...</span>
+        </div>
+
+        <!-- Summary Cards (4 Cards) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Pemasukan Bulan Ini</p>
+                    <h3 id="summary-income" class="text-xl sm:text-2xl font-bold text-emerald-600 mt-1">Rp 0</h3>
+                </div>
+                <div class="w-11 h-11 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center text-lg">
+                    <i class="fa-solid fa-arrow-trend-up"></i>
+                </div>
+            </div>
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Pengeluaran Bulan Ini</p>
+                    <h3 id="summary-expense" class="text-xl sm:text-2xl font-bold text-rose-600 mt-1">Rp 0</h3>
+                </div>
+                <div class="w-11 h-11 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center text-lg">
+                    <i class="fa-solid fa-arrow-trend-down"></i>
+                </div>
+            </div>
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Saldo Bulan Ini</p>
+                    <h3 id="summary-balance" class="text-xl sm:text-2xl font-bold text-indigo-600 mt-1">Rp 0</h3>
+                </div>
+                <div class="w-11 h-11 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-lg">
+                    <i class="fa-solid fa-wallet"></i>
+                </div>
+            </div>
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Saldo Total (Semua)</p>
+                    <h3 id="summary-alltime-balance" class="text-xl sm:text-2xl font-bold text-cyan-600 mt-1">Rp 0</h3>
+                </div>
+                <div class="w-11 h-11 bg-cyan-50 text-cyan-600 rounded-xl flex items-center justify-center text-lg">
+                    <i class="fa-solid fa-vault"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Transaction Form -->
+            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-1 h-fit">
+                <h2 class="text-base font-bold text-slate-900 mb-4 flex items-center space-x-2">
+                    <i class="fa-solid fa-pen-to-square text-indigo-600"></i>
+                    <span>Tambah Transaksi Baru</span>
+                </h2>
+                <form id="transaction-form" onsubmit="handleFormSubmit(event)" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Tipe Transaksi</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <label class="cursor-pointer">
+                                <input type="radio" name="type" value="Pemasukan" class="peer sr-only" checked>
+                                <div class="text-center py-2.5 px-3 rounded-xl border border-slate-200 text-sm font-medium text-slate-600 peer-checked:bg-emerald-50 peer-checked:border-emerald-500 peer-checked:text-emerald-700 transition">
+                                    <i class="fa-solid fa-plus-circle mr-1"></i> Pemasukan
+                                </div>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="type" value="Pengeluaran" class="peer sr-only">
+                                <div class="text-center py-2.5 px-3 rounded-xl border border-slate-200 text-sm font-medium text-slate-600 peer-checked:bg-rose-50 peer-checked:border-rose-500 peer-checked:text-rose-700 transition">
+                                    <i class="fa-solid fa-minus-circle mr-1"></i> Pengeluaran
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Tanggal</label>
+                        <input type="date" id="tx-date" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 text-sm">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Jumlah (Rp)</label>
+                        <input type="number" id="tx-amount" min="1" placeholder="Contoh: 50000" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 text-sm">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Keterangan / Catatan</label>
+                        <textarea id="tx-desc" rows="3" placeholder="Catatan transaksi..." class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 text-sm resize-none"></textarea>
+                    </div>
+
+                    <button type="submit" id="submit-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl shadow-md shadow-indigo-100 transition flex items-center justify-center space-x-2 text-sm">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                        <span>Simpan & Kirim ke Sheet</span>
+                    </button>
+                </form>
+            </div>
+
+            <!-- Transaction Table & Printable Area -->
+            <div id="printable-area" class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-2 flex flex-col">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-slate-100 gap-4 mb-4">
+                    <div>
+                        <h2 class="text-base font-bold text-slate-900">Riwayat Transaksi</h2>
+                        <p class="text-xs text-slate-500">Daftar pemasukan & pengeluaran terpilih</p>
+                    </div>
+
+                    <!-- Filter & Action Controls -->
+                    <div class="flex flex-wrap items-center gap-2 no-print">
+                        <div class="flex items-center space-x-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+                            <i class="fa-regular fa-calendar text-slate-400 text-xs"></i>
+                            <span class="text-xs font-medium text-slate-600">Bulan:</span>
+                            <select id="filter-month" onchange="renderTable()" class="bg-transparent text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer">
+                                <option value="ALL">Semua Bulan</option>
+                            </select>
+                        </div>
+                        <button onclick="exportCSV()" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 border border-emerald-200">
+                            <i class="fa-solid fa-file-excel text-xs"></i>
+                            <span>Export CSV</span>
+                        </button>
+                        <button onclick="printReport()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5">
+                            <i class="fa-solid fa-print text-xs"></i>
+                            <span>Cetak Laporan</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Printable Header Title (Visible only when printing) -->
+                <div class="hidden print:block mb-4 text-center">
+                    <h2 class="text-xl font-bold">LAPORAN KEUANGAN KEUANGANKU</h2>
+                    <p id="print-period-label" class="text-sm text-slate-600">Periode Bulan: -</p>
+                </div>
+
+                <div class="flex-1 overflow-x-auto min-h-[300px]">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                                <th class="py-3 px-3">Tanggal</th>
+                                <th class="py-3 px-3">Tipe</th>
+                                <th class="py-3 px-3">Keterangan</th>
+                                <th class="py-3 px-3 text-right">Jumlah</th>
+                                <th class="py-3 px-3 text-center no-print">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transaction-table-body" class="divide-y divide-slate-100 text-sm">
+                            <tr>
+                                <td colspan="5" class="text-center py-12 text-slate-400">
+                                    <i class="fa-solid fa-folder-open text-3xl mb-2 block"></i>
+                                    Memuat data atau belum ada transaksi...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="config-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h3 class="font-bold text-slate-900 text-lg flex items-center space-x-2">
+                    <i class="fa-solid fa-link text-indigo-600"></i>
+                    <span>Pengaturan Google Apps Script</span>
+                </h3>
+                <button onclick="closeConfigModal()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-3 text-xs text-slate-600">
+                <p>Masukkan URL Web App Google Apps Script Anda agar aplikasi dapat terhubung secara dua arah ke Google Spreadsheet.</p>
+                <div>
+                    <label class="block font-semibold text-slate-700 uppercase mb-1">Web App URL</label>
+                    <input type="url" id="gas-url-input" placeholder="https://script.google.com/macros/s/.../exec" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 text-sm font-mono">
+                </div>
+                
+                <!-- Status Test & Connection Feedback Banner -->
+                <div id="test-status-banner" class="hidden p-3 rounded-xl border text-xs font-medium flex items-center space-x-2">
+                    <i id="test-status-icon" class="fa-solid fa-circle-info"></i>
+                    <span id="test-status-text">Siap menguji koneksi...</span>
+                </div>
+
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
+                    <span class="font-bold text-slate-700 block">Panduan Singkat Google Apps Script (GAS):</span>
+                    <p>1. Buat Google Sheet baru, buka <b>Extensions > Apps Script</b>.</p>
+                    <p>2. Salin kode template GAS di bawah ini, deploy sebagai Web App (Execute as: <i>Me</i>, Who has access: <i>Anyone</i>).</p>
+                    <p class="text-rose-600 font-medium pt-1">⚠️ Catatan Penting: Karena pembatasan keamanan browser (CORS), klik tombol di bawah untuk membuka Web App dan memberikan izin otorisasi Google jika pertama kali.</p>
+                </div>
+
+                <!-- Quick Open & Authorize Link Button -->
+                <div id="auth-action-container">
+                    <a id="auth-link-btn" href="#" target="_blank" onclick="handleAuthClick(event)" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded-xl text-xs font-semibold shadow-sm transition flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-external-link-alt"></i>
+                        <span>Buka URL Web App untuk Otorisasi Akun Google</span>
+                    </a>
+                </div>
+
+                <details class="group bg-indigo-50/50 border border-indigo-100 rounded-xl p-3">
+                    <summary class="font-semibold text-indigo-700 cursor-pointer flex items-center justify-between">
+                        <span>Lihat Kode Template Google Apps Script (Dengan Header Otomatis)</span>
+                        <i class="fa-solid fa-chevron-down text-xs"></i>
+                    </summary>
+                    <div class="mt-3 space-y-2">
+                        <textarea readonly rows="16" class="w-full font-mono text-[11px] bg-white p-2 border border-indigo-200 rounded-lg select-all">
+// SALIN KODE INI KE GOOGLE APPS SCRIPT ANDA
+function checkAndInitHeader(sheet) {
+  var firstRow = sheet.getRange(1, 1, 1, 5).getValues()[0];
+  if (!firstRow[0] && !firstRow[1]) {
+    sheet.getRange(1, 1, 1, 5).setValues([["ID", "Tanggal", "Tipe", "Jumlah", "Keterangan"]]);
+    sheet.getRange(1, 1, 1, 5).setFontWeight("bold");
+  }
+}
+
+function doPost(e) {
+  try {
+    var lock = LockService.getScriptLock();
+    lock.tryLock(10000);
+    
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    checkAndInitHeader(sheet);
+    
+    var data = JSON.parse(e.postData.contents);
+    
+    if (data.action === "add") {
+      sheet.appendRow([data.id, data.date, data.type, data.amount, data.description]);
+      return ContentService.createTextOutput(JSON.stringify({"status": "success", "id": data.id}))
+        .setMimeType(ContentService.MimeType.JSON);
+    } else if (data.action === "delete") {
+      var rows = sheet.getDataRange().getValues();
+      for (var i = 1; i < rows.length; i++) {
+        if (String(rows[i][0]) === String(data.id)) {
+          sheet.deleteRow(i + 1);
+          break;
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({"status": "deleted"}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    lock.releaseLock();
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({"status": "error", "message": err.toString()}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doGet(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  checkAndInitHeader(sheet);
+  
+  var rows = sheet.getDataRange().getValues();
+  var data = [];
+  for (var i = 1; i < rows.length; i++) {
+    if(rows[i][0]) {
+      var rawDate = rows[i][1];
+      var dateStr = "";
+      if (rawDate instanceof Date) {
+        var year = rawDate.getFullYear();
+        var month = String(rawDate.getMonth() + 1).padStart(2, '0');
+        var day = String(rawDate.getDate()).padStart(2, '0');
+        dateStr = year + "-" + month + "-" + day;
+      } else {
+        dateStr = String(rawDate).trim();
+      }
+
+      data.push({
+        id: String(rows[i][0]),
+        date: dateStr,
+        type: String(rows[i][2]),
+        amount: Number(rows[i][3]),
+        description: String(rows[i][4])
+      });
+    }
+  }
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+                        </textarea>
+                        <p class="text-[10px] text-slate-500">Pastikan saat Deploy Anda memilih: <b>Execute as: Me</b> dan <b>Who has access: Anyone</b>.</p>
+                    </div>
+                </details>
+            </div>
+
+            <div class="flex items-center justify-between pt-3 border-t border-slate-100">
+                <button onclick="runConnectionTest()" id="test-btn" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-sm transition flex items-center space-x-1.5">
+                    <i class="fa-solid fa-stethoscope"></i>
+                    <span>Tes Koneksi</span>
+                </button>
+                <div class="flex items-center space-x-2">
+                    <button onclick="closeConfigModal()" class="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-100">Batal</button>
+                    <button onclick="saveConfig()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-sm">Simpan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State Management
+        let transactions = JSON.parse(localStorage.getItem('keuangan_txs')) || [];
+        let gasUrl = localStorage.getItem('keuangan_gas_url') || '';
+        let isConnected = false;
+
+        // Helper: Robustly normalize any date input to YYYY-MM-DD
+        function normalizeDateString(rawDate) {
+            if (!rawDate) return new Date().toISOString().split('T')[0];
+            
+            const stringVal = String(rawDate).trim();
+            
+            // Check YYYY-MM-DD format
+            if (/^\d{4}-\d{2}-\d{2}$/.test(stringVal)) {
+                return stringVal;
+            }
+
+            // Check DD/MM/YYYY or DD-MM-YYYY format
+            const dmyMatch = stringVal.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+            if (dmyMatch) {
+                const day = dmyMatch[1].padStart(2, '0');
+                const month = dmyMatch[2].padStart(2, '0');
+                const year = dmyMatch[3];
+                return `${year}-${month}-${day}`;
+            }
+
+            // Try parsing as standard JS Date
+            const parsed = new Date(stringVal);
+            if (!isNaN(parsed.getTime())) {
+                const year = parsed.getFullYear();
+                const month = String(parsed.getMonth() + 1).padStart(2, '0');
+                const day = String(parsed.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+
+            return new Date().toISOString().split('T')[0];
+        }
+
+        // Initialize App on DOM Load
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date().toISOString().split('T')[0];
+            const dateInput = document.getElementById('tx-date');
+            if (dateInput) {
+                dateInput.value = today;
+            }
+
+            if (gasUrl) {
+                const gasInput = document.getElementById('gas-url-input');
+                if (gasInput) gasInput.value = gasUrl;
+            }
+
+            // Normalize existing local transactions dates
+            transactions = transactions.map(t => ({
+                ...t,
+                date: normalizeDateString(t.date)
+            }));
+
+            populateMonthFilterOptions(true);
+            renderTable();
+
+            if (gasUrl) {
+                testConnectionSilent();
+            }
+        });
+
+        // Modal Controls
+        function openConfigModal() {
+            const modal = document.getElementById('config-modal');
+            if (modal) modal.classList.remove('hidden');
+            if (gasUrl) {
+                const gasInput = document.getElementById('gas-url-input');
+                if (gasInput) gasInput.value = gasUrl;
+                const authBtn = document.getElementById('auth-link-btn');
+                if (authBtn) authBtn.href = gasUrl;
+            }
+        }
+
+        function closeConfigModal() {
+            const modal = document.getElementById('config-modal');
+            if (modal) modal.classList.add('hidden');
+            const banner = document.getElementById('test-status-banner');
+            if (banner) banner.classList.add('hidden');
+        }
+
+        function saveConfig() {
+            const urlInput = document.getElementById('gas-url-input');
+            const url = urlInput ? urlInput.value.trim() : '';
+            if (url) {
+                gasUrl = url;
+                localStorage.setItem('keuangan_gas_url', gasUrl);
+                showToast("URL Google Apps Script disimpan.", "success");
+                closeConfigModal();
+                triggerSync();
+            } else {
+                showToast("URL tidak boleh kosong.", "error");
+            }
+        }
+
+        function setTestBanner(status, text) {
+            const banner = document.getElementById('test-status-banner');
+            const icon = document.getElementById('test-status-icon');
+            const label = document.getElementById('test-status-text');
+            if (!banner || !icon || !label) return;
+
+            banner.classList.remove('hidden', 'bg-amber-50', 'border-amber-200', 'text-amber-800', 'bg-emerald-50', 'border-emerald-200', 'text-emerald-800', 'bg-rose-50', 'border-rose-200', 'text-rose-800', 'bg-blue-50', 'border-blue-200', 'text-blue-800');
+
+            if (status === 'checking') {
+                banner.classList.add('bg-blue-50', 'border-blue-200', 'text-blue-800');
+                icon.className = "fa-solid fa-spinner fa-spin text-blue-600";
+            } else if (status === 'connecting') {
+                banner.classList.add('bg-amber-50', 'border-amber-200', 'text-amber-800');
+                icon.className = "fa-solid fa-rotate fa-spin text-amber-600";
+            } else if (status === 'success') {
+                banner.classList.add('bg-emerald-50', 'border-emerald-200', 'text-emerald-800');
+                icon.className = "fa-solid fa-circle-check text-emerald-600";
+            } else {
+                banner.classList.add('bg-rose-50', 'border-rose-200', 'text-rose-800');
+                icon.className = "fa-solid fa-circle-exclamation text-rose-600";
+            }
+            label.innerText = text;
+        }
+
+        function updateConnectionUI(connected) {
+            isConnected = connected;
+            const badge = document.getElementById('connection-badge');
+            const dot = document.getElementById('status-dot');
+            const text = document.getElementById('status-text');
+            const mobileDot = document.getElementById('mobile-status-dot');
+            const mobileText = document.getElementById('mobile-status-text');
+
+            if (badge && dot && text) {
+                if (connected) {
+                    badge.className = "hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200";
+                    dot.className = "w-2 h-2 rounded-full bg-emerald-500";
+                    text.innerText = "Terhubung";
+                    if (mobileDot) mobileDot.className = "w-2 h-2 rounded-full bg-emerald-500";
+                    if (mobileText) mobileText.innerText = "Status: Terhubung";
+                } else {
+                    badge.className = "hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200";
+                    dot.className = "w-2 h-2 rounded-full bg-amber-500 animate-pulse";
+                    text.innerText = "Belum Terhubung";
+                    if (mobileDot) mobileDot.className = "w-2 h-2 rounded-full bg-amber-500";
+                    if (mobileText) mobileText.innerText = "Status: Belum Terhubung";
+                }
+            }
+        }
+
+        function populateMonthFilterOptions(setDefaultToCurrent = false) {
+            const select = document.getElementById('filter-month');
+            if (!select) return;
+            
+            const currentSelected = select.value;
+            const monthsSet = new Set();
+            
+            transactions.forEach(t => {
+                const normalized = normalizeDateString(t.date);
+                if (normalized && normalized.length >= 7) {
+                    monthsSet.add(normalized.substring(0, 7));
+                }
+            });
+
+            const currentMonthStr = new Date().toISOString().substring(0, 7);
+            monthsSet.add(currentMonthStr);
+
+            const sortedMonths = Array.from(monthsSet).sort().reverse();
+
+            select.innerHTML = '<option value="ALL">Semua Bulan</option>';
+            sortedMonths.forEach(m => {
+                const [year, month] = m.split('-');
+                const dateObj = new Date(parseInt(year), parseInt(month) - 1, 1);
+                const monthName = dateObj.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+                
+                const opt = document.createElement('option');
+                opt.value = m;
+                opt.innerText = monthName;
+                select.appendChild(opt);
+            });
+
+            if (setDefaultToCurrent && sortedMonths.includes(currentMonthStr)) {
+                select.value = currentMonthStr;
+            } else if (currentSelected && (currentSelected === 'ALL' || sortedMonths.includes(currentSelected))) {
+                select.value = currentSelected;
+            } else {
+                select.value = currentMonthStr;
+            }
+        }
+
+        async function runConnectionTest() {
+            const urlInput = document.getElementById('gas-url-input');
+            const url = urlInput ? urlInput.value.trim() : '';
+            const authContainer = document.getElementById('auth-action-container');
+
+            if (!url) {
+                setTestBanner('error', 'URL Apps Script belum diisi!');
+                return;
+            }
+
+            const authBtn = document.getElementById('auth-link-btn');
+            if (authBtn) authBtn.href = url;
+            if (authContainer) authContainer.classList.remove('hidden');
+
+            try {
+                setTestBanner('checking', 'Memeriksa URL...');
+                await new Promise(r => setTimeout(r, 400));
+
+                setTestBanner('connecting', 'Menghubungkan ke Google Spreadsheet...');
+                
+                let textResponse;
+                try {
+                    const response = await fetch(url, { method: 'GET', redirect: 'follow' });
+                    textResponse = await response.text();
+                } catch (fetchErr) {
+                    throw new Error("Koneksi diblokir. Pastikan Web App dipublikasikan dengan akses 'Anyone' (Semua Orang).");
+                }
+
+                if (!textResponse || textResponse.trim().startsWith('<!DOCTYPE') || textResponse.trim().startsWith('<html')) {
+                    throw new Error("Google meminta izin otorisasi. Klik tombol biru di atas untuk login & izinkan akses.");
+                }
+
+                const data = JSON.parse(textResponse);
+                if (Array.isArray(data)) {
+                    transactions = data.map(t => ({
+                        ...t,
+                        date: normalizeDateString(t.date)
+                    }));
+                    localStorage.setItem('keuangan_txs', JSON.stringify(transactions));
+                    gasUrl = url;
+                    localStorage.setItem('keuangan_gas_url', gasUrl);
+                    updateConnectionUI(true);
+                    populateMonthFilterOptions(false);
+                    renderTable();
+                    setTestBanner('success', `Berhasil terhubung! Membaca ${data.length} data dari Spreadsheet.`);
+                    showToast("Koneksi berhasil & data tersinkronisasi!", "success");
+                } else {
+                    throw new Error("Format data Spreadsheet tidak sesuai.");
+                }
+            } catch (err) {
+                console.warn("Detail Tes Koneksi:", err);
+                updateConnectionUI(false);
+                setTestBanner('success', "Otorisasi akun diperlukan. Klik tombol biru di atas, lalu klik Tes Koneksi lagi.");
+                showToast("Silakan lakukan otorisasi di tab baru.", "info");
+            }
+        }
+
+        function handleAuthClick(e) {
+            showToast("Buka tab baru untuk otorisasi Google. Setelah selesai, klik Tes Koneksi kembali.", "info");
+        }
+
+        async function testConnectionSilent() {
+            if (!gasUrl) return;
+            try {
+                const response = await fetch(gasUrl, { method: 'GET', redirect: 'follow' });
+                const textResponse = await response.text();
+                if (!textResponse.trim().startsWith('<!DOCTYPE') && !textResponse.trim().startsWith('<html')) {
+                    const data = JSON.parse(textResponse);
+                    if (Array.isArray(data)) {
+                        transactions = data.map(t => ({
+                            ...t,
+                            date: normalizeDateString(t.date)
+                        }));
+                        localStorage.setItem('keuangan_txs', JSON.stringify(transactions));
+                        updateConnectionUI(true);
+                        populateMonthFilterOptions(false);
+                        renderTable();
+                    }
+                }
+            } catch (e) {
+                console.info("Gagal membaca latar belakang, menggunakan cache lokal.");
+                updateConnectionUI(false);
+                renderTable();
+            }
+        }
+
+        async function triggerSync() {
+            if (!gasUrl) {
+                openConfigModal();
+                showToast("Harap atur URL Google Apps Script terlebih dahulu.", "error");
+                return;
+            }
+            showToast("Menyelaraskan data dengan Spreadsheet...", "info");
+            const icon = document.getElementById('sync-icon');
+            if (icon) icon.classList.add('fa-spin');
+            await testConnectionSilent();
+            if (icon) icon.classList.remove('fa-spin');
+            showToast("Sinkronisasi selesai.", "success");
+        }
+
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            const checkedType = document.querySelector('input[name="type"]:checked');
+            const type = checkedType ? checkedType.value : 'Pemasukan';
+            const dateInput = document.getElementById('tx-date');
+            const date = normalizeDateString(dateInput ? dateInput.value : '');
+            const amountInput = document.getElementById('tx-amount');
+            const amount = parseFloat(amountInput ? amountInput.value : 0);
+            const descInput = document.getElementById('tx-desc');
+            const description = descInput ? descInput.value.trim() || "-" : "-";
+            const id = 'TX-' + Date.now();
+
+            const newTx = { id, date, type, amount, description };
+
+            transactions.push(newTx);
+            localStorage.setItem('keuangan_txs', JSON.stringify(transactions));
+            populateMonthFilterOptions(false);
+            
+            const filterSelect = document.getElementById('filter-month');
+            if (filterSelect && filterSelect.value !== 'ALL') {
+                filterSelect.value = date.substring(0, 7);
+            }
+
+            renderTable();
+            const form = document.getElementById('transaction-form');
+            if (form) form.reset();
+            if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+            showToast("Transaksi berhasil ditambahkan secara lokal.", "success");
+
+            if (gasUrl) {
+                try {
+                    const btn = document.getElementById('submit-btn');
+                    if (btn) {
+                        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Mengirim ke Sheet...</span>`;
+                        btn.disabled = true;
+                    }
+
+                    await fetch(gasUrl, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'add', ...newTx })
+                    });
+
+                    showToast("Data terkirim ke Google Spreadsheet!", "success");
+                    setTimeout(() => { testConnectionSilent(); }, 1500);
+                } catch (err) {
+                    console.error("Gagal kirim ke sheet:", err);
+                    showToast("Disimpan lokal, namun gagal sync ke Sheet.", "error");
+                } finally {
+                    const btn = document.getElementById('submit-btn');
+                    if (btn) {
+                        btn.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> <span>Simpan & Kirim ke Sheet</span>`;
+                        btn.disabled = false;
+                    }
+                }
+            }
+        }
+
+        async function deleteTransaction(id) {
+            if (!confirm("Apakah Anda yakin ingin menghapus transaksi ini?")) return;
+
+            transactions = transactions.filter(t => String(t.id) !== String(id));
+            localStorage.setItem('keuangan_txs', JSON.stringify(transactions));
+            populateMonthFilterOptions(false);
+            renderTable();
+            showToast("Transaksi dihapus.", "success");
+
+            if (gasUrl) {
+                try {
+                    await fetch(gasUrl, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'delete', id: String(id) })
+                    });
+                    setTimeout(() => { testConnectionSilent(); }, 1500);
+                } catch (err) {
+                    console.error("Gagal hapus dari sheet:", err);
+                }
+            }
+        }
+
+        function renderTable() {
+            const filterMonthEl = document.getElementById('filter-month');
+            const filterMonth = filterMonthEl ? filterMonthEl.value : 'ALL';
+            
+            const periodLabelText = filterMonth === 'ALL' ? 'Semua Bulan' : (() => {
+                const [year, month] = filterMonth.split('-');
+                return new Date(parseInt(year), parseInt(month) - 1, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+            })();
+            
+            const printPeriodLabel = document.getElementById('print-period-label');
+            if (printPeriodLabel) printPeriodLabel.innerText = `Periode Bulan: ${periodLabelText}`;
+
+            const filtered = transactions.filter(t => {
+                const normalizedDate = normalizeDateString(t.date);
+                if (filterMonth === 'ALL') return true;
+                return normalizedDate.startsWith(filterMonth);
+            });
+
+            filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            const tbody = document.getElementById('transaction-table-body');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            let totalIncome = 0;
+            let totalExpense = 0;
+
+            // Calculate all-time totals regardless of active filter
+            let allTimeIncome = 0;
+            let allTimeExpense = 0;
+            transactions.forEach(t => {
+                const amt = parseFloat(t.amount) || 0;
+                if (t.type === 'Pemasukan') allTimeIncome += amt;
+                else allTimeExpense += amt;
+            });
+            const allTimeBalance = allTimeIncome - allTimeExpense;
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="text-center py-12 text-slate-400">
+                            <i class="fa-solid fa-folder-open text-3xl mb-2 block"></i>
+                            Tidak ada transaksi pada periode ini.
+                        </td>
+                    </tr>
+                `;
+            } else {
+                filtered.forEach(t => {
+                    const amount = parseFloat(t.amount) || 0;
+                    if (t.type === 'Pemasukan') {
+                        totalIncome += amount;
+                    } else {
+                        totalExpense += amount;
+                    }
+
+                    const normalizedDate = normalizeDateString(t.date);
+                    let formattedDate = normalizedDate;
+                    const parsedDate = new Date(normalizedDate);
+                    if (!isNaN(parsedDate.getTime())) {
+                        formattedDate = parsedDate.toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' });
+                    }
+
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-slate-50/80 transition";
+                    tr.innerHTML = `
+                        <td class="py-3 px-3 font-medium text-slate-700 whitespace-nowrap">${formattedDate}</td>
+                        <td class="py-3 px-3">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${t.type === 'Pemasukan' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}">
+                                ${t.type}
+                            </span>
+                        </td>
+                        <td class="py-3 px-3 text-slate-500 max-w-xs truncate">${t.description || '-'}</td>
+                        <td class="py-3 px-3 text-right font-semibold ${t.type === 'Pemasukan' ? 'text-emerald-600' : 'text-rose-600'}">
+                            ${t.type === 'Pemasukan' ? '+' : '-'} Rp ${amount.toLocaleString('id-ID')}
+                        </td>
+                        <td class="py-3 px-3 text-center no-print">
+                            <button onclick="deleteTransaction('${t.id}')" class="text-slate-400 hover:text-rose-600 p-1.5 transition" title="Hapus">
+                                <i class="fa-solid fa-trash-can text-xs"></i>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            const sumIncome = document.getElementById('summary-income');
+            if (sumIncome) sumIncome.innerText = `Rp ${totalIncome.toLocaleString('id-ID')}`;
+            const sumExpense = document.getElementById('summary-expense');
+            if (sumExpense) sumExpense.innerText = `Rp ${totalExpense.toLocaleString('id-ID')}`;
+            
+            const balance = totalIncome - totalExpense;
+            const balanceEl = document.getElementById('summary-balance');
+            if (balanceEl) {
+                balanceEl.innerText = `Rp ${balance.toLocaleString('id-ID')}`;
+                balanceEl.className = `text-xl sm:text-2xl font-bold mt-1 ${balance >= 0 ? 'text-indigo-600' : 'text-rose-600'}`;
+            }
+
+            const allTimeBalanceEl = document.getElementById('summary-alltime-balance');
+            if (allTimeBalanceEl) {
+                allTimeBalanceEl.innerText = `Rp ${allTimeBalance.toLocaleString('id-ID')}`;
+                allTimeBalanceEl.className = `text-xl sm:text-2xl font-bold mt-1 ${allTimeBalance >= 0 ? 'text-cyan-600' : 'text-rose-600'}`;
+            }
+        }
+
+        function printReport() {
+            window.print();
+        }
+
+        function exportCSV() {
+            if (transactions.length === 0) {
+                showToast("Tidak ada data untuk diexport.", "error");
+                return;
+            }
+
+            let csvContent = "data:text/csv;charset=utf-8,ID,Tanggal,Tipe,Jumlah,Keterangan\r\n";
+            transactions.forEach(t => {
+                const row = [t.id, t.date, t.type, t.amount, `"${(t.description || '').replace(/"/g, '""')}"`];
+                csvContent += row.join(",") + "\r\n";
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `laporan_keuangan_${new Date().toISOString().slice(0, 10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast("Laporan berhasil diexport ke CSV.", "success");
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const msg = document.getElementById('toast-msg');
+            const icon = document.getElementById('toast-icon');
+
+            if (!toast || !msg || !icon) return;
+
+            msg.innerText = message;
+            if (type === 'success') {
+                icon.className = "fa-solid fa-circle-check text-emerald-400";
+            } else if (type === 'error') {
+                icon.className = "fa-solid fa-circle-exclamation text-rose-400";
+            } else {
+                icon.className = "fa-solid fa-circle-info text-blue-400";
+            }
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3500);
+        }
+    </script>
+</body>
+</html>
